@@ -1,12 +1,28 @@
 {
-  "FIXED_SIZE": 600,
-  "PADDING": 40,
-  "BG_COLOR": "#000",
-  "STROKE_COLOR": "#fff",
-  "STROKE_WIDTH_BOUNDARY": 40,
-  "STROKE_WIDTH_ARC": 20,
-  "STROKE_WIDTH_BRACKET": 20,
-  "STROKE_WIDTH_DOT": 10,
-  "BRACKET_GAP": 40,
-  "DUM_RADIUS": 50
+  "code": {
+    "FIXED_SIZE": 2000,
+    "PADDING": 40,
+    "BG_COLOR": "#000",
+    "STROKE_COLOR": "#fff",
+    "STROKE_WIDTH_BOUNDARY": 10,
+    "STROKE_WIDTH_ARC": 1,
+    "STROKE_WIDTH_BRACKET": 1,
+    "STROKE_WIDTH_DOT": 10,
+    "BRACKET_GAP": 2,
+    "DUM_RADIUS": 50,
+    "ARC_ANGLE": 180
+  },
+  "code2": {
+    "FIXED_SIZE": 600,
+    "PADDING": 40,
+    "BG_COLOR": "#000",
+    "STROKE_COLOR": "#fff",
+    "STROKE_WIDTH_BOUNDARY": 40,
+    "STROKE_WIDTH_ARC": 20,
+    "STROKE_WIDTH_BRACKET": 20,
+    "STROKE_WIDTH_DOT": 10,
+    "BRACKET_GAP": 40,
+    "DUM_RADIUS": 50,
+    "ARC_ANGLE": 180
+  }
 }

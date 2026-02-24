@@ -1,11 +1,25 @@
 Promise.all([
     fetch("config.json").then(r => r.json()),
     fetch("program.json").then(r => r.json())
-]).then(([config, program]) => {
+]).then(([configs, program]) => {
 
 const NS = "http://www.w3.org/2000/svg";
 const programKeys = Object.keys(program);
 let currentCode = programKeys[0];
+
+// Default config values for any program missing from config.json
+const DEFAULT_CONFIG = {
+    FIXED_SIZE: 600, PADDING: 40, BG_COLOR: "#000", STROKE_COLOR: "#fff",
+    STROKE_WIDTH_BOUNDARY: 40, STROKE_WIDTH_ARC: 20, STROKE_WIDTH_BRACKET: 20,
+    STROKE_WIDTH_DOT: 10, BRACKET_GAP: 40, DUM_RADIUS: 50, ARC_ANGLE: 180
+};
+
+// Ensure every program has a config entry
+for (const key of programKeys) {
+    if (!configs[key]) configs[key] = { ...DEFAULT_CONFIG };
+}
+
+let config = configs[currentCode];
 let sizeOverride = null;
 let currentPosMap = new Map();
 
@@ -160,9 +174,11 @@ function draw(cfg) {
     }
 
     // Per-item paths instead of one monolithic path
-    let penX = cx + outerRadius;
-    let penY = cy;
-    let start = true;
+    let currentAngle = 0; // cumulative angle in radians
+    const arcRad = cfg.ARC_ANGLE * Math.PI / 180;
+    const isFullCircle = (cfg.ARC_ANGLE >= 359.99);
+    let penX = cx + outerRadius * Math.cos(currentAngle);
+    let penY = cy + outerRadius * Math.sin(currentAngle);
     const bracketCircles = [];
     let rOffset = 0;
     const itemPaths = [];    // { d, idx, type: "arc"|"connector" }
@@ -173,30 +189,40 @@ function draw(cfg) {
         if (item.type === "dir") {
             rOffset += sectionWidth;
             const r = outerRadius - rOffset;
-            const clockwise = item.dir === "<";
-            const startX = cx + r * (start ? 1 : -1);
-            const arcEndX = cx + r * (start ? -1 : 1);
-            const sweepFlag = clockwise ? 0 : 1;
+            const direction = (item.dir === ">") ? 1 : -1;
+            const arcStartAngle = currentAngle;
+            const arcEndAngle = currentAngle + direction * arcRad;
 
-            const d = `M ${penX} ${penY} L ${startX} ${cy} A ${r} ${r} 0 0 ${sweepFlag} ${arcEndX} ${cy}`;
+            const startX = cx + r * Math.cos(arcStartAngle);
+            const startY = cy + r * Math.sin(arcStartAngle);
+            const endX = cx + r * Math.cos(arcEndAngle);
+            const endY = cy + r * Math.sin(arcEndAngle);
+
+            let d;
+            if (isFullCircle) {
+                // SVG can't draw a single full-circle arc; split into two 180° halves
+                const midAngle = currentAngle + direction * Math.PI;
+                const midX = cx + r * Math.cos(midAngle);
+                const midY = cy + r * Math.sin(midAngle);
+                const sweepFlag = (direction > 0) ? 1 : 0;
+                d = `M ${penX} ${penY} L ${startX} ${startY} A ${r} ${r} 0 0 ${sweepFlag} ${midX} ${midY} A ${r} ${r} 0 0 ${sweepFlag} ${endX} ${endY}`;
+            } else {
+                const sweepFlag = (direction > 0) ? 1 : 0;
+                const largeArcFlag = (cfg.ARC_ANGLE > 180) ? 1 : 0;
+                d = `M ${penX} ${penY} L ${startX} ${startY} A ${r} ${r} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
+            }
             itemPaths.push({ d, idx: i, type: "arc" });
 
-            penX = arcEndX;
-            penY = cy;
+            penX = endX;
+            penY = endY;
+            currentAngle = arcEndAngle;
 
             if (item.mods.length > 0) {
                 const symbols = compressMods(item.mods);
-                const startAngle = start ? 0 : Math.PI;
-                const endAngle = start ? Math.PI : 2 * Math.PI;
                 const n = symbols.length;
                 for (let k = 0; k < n; k++) {
                     const t = (k + 1) / (n + 1);
-                    let angle;
-                    if (!clockwise) {
-                        angle = startAngle + (endAngle - startAngle) * t;
-                    } else {
-                        angle = startAngle - (endAngle - startAngle) * t;
-                    }
+                    const angle = arcStartAngle + direction * arcRad * t;
                     dotsToDraw.push({
                         x: cx + r * Math.cos(angle),
                         y: cy + r * Math.sin(angle),
@@ -208,36 +234,36 @@ function draw(cfg) {
                     });
                 }
             }
-
-            start = !start;
         } else {
             const isOpen = item.type === "[";
             rOffset += sectionWidth;
-            const side = start ? 1 : -1;
+            const cosA = Math.cos(currentAngle);
+            const sinA = Math.sin(currentAngle);
             const centerR = outerRadius - rOffset;
 
             if (isOpen) {
                 const outerR = centerR + BRACKET_GAP / 2;
                 const innerR = centerR - BRACKET_GAP / 2;
-                const d = `M ${penX} ${penY} L ${cx + outerR * side} ${cy}`;
+                const d = `M ${penX} ${penY} L ${cx + outerR * cosA} ${cy + outerR * sinA}`;
                 itemPaths.push({ d, idx: i, type: "connector" });
-                penX = cx + innerR * side;
-                penY = cy;
+                penX = cx + innerR * cosA;
+                penY = cy + innerR * sinA;
                 bracketCircles.push({ outerR, innerR, double: true, idx: i });
             } else {
                 const r = centerR;
-                const d = `M ${penX} ${penY} L ${cx + r * side} ${cy}`;
+                const d = `M ${penX} ${penY} L ${cx + r * cosA} ${cy + r * sinA}`;
                 itemPaths.push({ d, idx: i, type: "connector" });
-                penX = cx + r * side;
-                penY = cy;
+                penX = cx + r * cosA;
+                penY = cy + r * sinA;
                 bracketCircles.push({ outerR: r, double: false, idx: i });
             }
         }
     }
 
     // Final line to inner circle
-    const endX = cx + dumRadius * (start ? 1 : -1);
-    const finalD = `M ${penX} ${penY} L ${endX} ${cy}`;
+    const endX = cx + dumRadius * Math.cos(currentAngle);
+    const endY = cy + dumRadius * Math.sin(currentAngle);
+    const finalD = `M ${penX} ${penY} L ${endX} ${endY}`;
     itemPaths.push({ d: finalD, idx: -1, type: "connector" });
 
     // Append visible paths
@@ -489,9 +515,11 @@ programKeys.forEach(key => {
     if (key === currentCode) btn.classList.add("active");
     btn.addEventListener("click", () => {
         currentCode = key;
+        config = configs[currentCode];
         sizeOverride = null;
         btnRow.querySelectorAll("button").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
+        syncSlidersFromConfig();
         draw(config);
     });
     btnRow.appendChild(btn);
@@ -527,6 +555,23 @@ bracketGapInput.addEventListener("input", () => {
     config.BRACKET_GAP = parseFloat(bracketGapInput.value);
     draw(config);
 });
+
+const arcAngleInput = document.getElementById("arc-angle");
+arcAngleInput.value = config.ARC_ANGLE;
+arcAngleInput.addEventListener("input", () => {
+    config.ARC_ANGLE = parseFloat(arcAngleInput.value);
+    draw(config);
+});
+
+// --- Sync sliders to current config ---
+function syncSlidersFromConfig() {
+    for (const [id, key] of Object.entries(sliders)) {
+        document.getElementById(id).value = config[key];
+    }
+    dumRadiusInput.value = config.DUM_RADIUS;
+    bracketGapInput.value = config.BRACKET_GAP;
+    arcAngleInput.value = config.ARC_ANGLE;
+}
 
 // --- Zoom & pan ---
 let zoom = 1, panX = 0, panY = 0;

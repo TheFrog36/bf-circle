@@ -113,10 +113,7 @@ function draw(cfg) {
     const outerRadius = size / 2 - PADDING;
     const leftoverSpace = outerRadius - dumRadius;
 
-    const openBracketWidth = BRACKET_GAP + STROKE_WIDTH_BRACKET;
-    const closeBracketWidth = STROKE_WIDTH_BRACKET;
-    const totalBracketSpace = numOpen * openBracketWidth + numClose * closeBracketWidth;
-    const sectionWidth = (leftoverSpace - totalBracketSpace) / (numDirItems + 1);
+    const sectionWidth = leftoverSpace / (items.length + 1);
 
     // outer circle
     const outerCircle = document.createElementNS(NS, "circle");
@@ -206,29 +203,26 @@ function draw(cfg) {
             start = !start;
         } else {
             const isOpen = item.type === "[";
-            const bracketWidth = isOpen ? openBracketWidth : closeBracketWidth;
+            rOffset += sectionWidth;
             const side = start ? 1 : -1;
+            const centerR = outerRadius - rOffset;
 
             if (isOpen) {
-                const outerR = outerRadius - rOffset;
-                const innerR = outerR - BRACKET_GAP;
-                // Line to bracket outer edge
+                const outerR = centerR + BRACKET_GAP / 2;
+                const innerR = centerR - BRACKET_GAP / 2;
                 const d = `M ${penX} ${penY} L ${cx + outerR * side} ${cy}`;
                 itemPaths.push({ d, idx: i, type: "connector" });
                 penX = cx + innerR * side;
                 penY = cy;
                 bracketCircles.push({ outerR, innerR, double: true, idx: i });
             } else {
-                rOffset += bracketWidth;
-                const r = outerRadius - rOffset + bracketWidth / 2;
+                const r = centerR;
                 const d = `M ${penX} ${penY} L ${cx + r * side} ${cy}`;
                 itemPaths.push({ d, idx: i, type: "connector" });
                 penX = cx + r * side;
                 penY = cy;
                 bracketCircles.push({ outerR: r, double: false, idx: i });
             }
-
-            if (isOpen) rOffset += bracketWidth;
         }
     }
 
@@ -248,7 +242,7 @@ function draw(cfg) {
         svg.appendChild(path);
     }
 
-    // bracket circles
+    // bracket circles (full circles)
     for (const bc of bracketCircles) {
         const c = document.createElementNS(NS, "circle");
         c.setAttribute("cx", cx);
@@ -555,13 +549,17 @@ window.addEventListener("mouseup", () => {
     container.style.cursor = "grab";
 });
 
-document.getElementById("download").addEventListener("click", () => {
+function getCleanSvgSource() {
     const svgEl = document.querySelector("#container svg");
     const clone = svgEl.cloneNode(true);
     clone.querySelectorAll(".hit-area").forEach(el => el.remove());
     clone.querySelectorAll("[data-idx]").forEach(el => el.removeAttribute("data-idx"));
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(clone);
+    clone.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
+    return new XMLSerializer().serializeToString(clone);
+}
+
+document.getElementById("dl-svg").addEventListener("click", () => {
+    const source = getCleanSvgSource();
     const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -569,6 +567,35 @@ document.getElementById("download").addEventListener("click", () => {
     a.download = "bf-circle.svg";
     a.click();
     URL.revokeObjectURL(url);
+});
+
+document.getElementById("dl-png").addEventListener("click", () => {
+    const source = getCleanSvgSource();
+    const svgEl = document.querySelector("#container svg");
+    const vb = svgEl.getAttribute("viewBox").split(" ");
+    const w = parseFloat(vb[2]);
+    const h = parseFloat(vb[3]);
+
+    const img = new Image();
+    const blob = new Blob([source], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob((pngBlob) => {
+            const pngUrl = URL.createObjectURL(pngBlob);
+            const a = document.createElement("a");
+            a.href = pngUrl;
+            a.download = "bf-circle.png";
+            a.click();
+            URL.revokeObjectURL(pngUrl);
+        }, "image/png");
+    };
+    img.src = url;
 });
 
 // --- Bidirectional hover highlighting ---

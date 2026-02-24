@@ -21,7 +21,7 @@ function parse(testString) {
         } else if (ch === "[" || ch === "]") {
             items.push({ type: ch, pos: i });
             pendingMods = [];
-        } else if (ch === "+" || ch === "-") {
+        } else if (ch === "+" || ch === "-" || ch === "." || ch === ",") {
             if (items.length > 0) {
                 const last = items[items.length - 1];
                 if (last.type === "dir") {
@@ -52,12 +52,17 @@ function compressMods(mods) {
         const ch = mods[i].ch;
         let count = 0;
         while (i < mods.length && mods[i].ch === ch) { count++; i++; }
-        const hundreds = Math.floor(count / 100);
-        const tens = Math.floor((count % 100) / 10);
-        const ones = count % 10;
-        for (let j = 0; j < hundreds; j++) symbols.push({ filled: ch === "+", rings: 2 });
-        for (let j = 0; j < tens; j++) symbols.push({ filled: ch === "+", rings: 1 });
-        for (let j = 0; j < ones; j++) symbols.push({ filled: ch === "+", rings: 0 });
+        if (ch === "." || ch === ",") {
+            for (let j = 0; j < count; j++)
+                symbols.push({ shape: ch === "." ? "semicircle-out" : "semicircle-in" });
+        } else {
+            const hundreds = Math.floor(count / 100);
+            const tens = Math.floor((count % 100) / 10);
+            const ones = count % 10;
+            for (let j = 0; j < hundreds; j++) symbols.push({ shape: "dot", filled: ch === "+", rings: 2 });
+            for (let j = 0; j < tens; j++) symbols.push({ shape: "dot", filled: ch === "+", rings: 1 });
+            for (let j = 0; j < ones; j++) symbols.push({ shape: "dot", filled: ch === "+", rings: 0 });
+        }
     }
     return symbols;
 }
@@ -145,6 +150,8 @@ function draw(cfg) {
             dotsToDraw.push({
                 x: cx + outerRadius * Math.cos(angle),
                 y: cy + outerRadius * Math.sin(angle),
+                angle: angle,
+                shape: symbols[k].shape,
                 filled: symbols[k].filled,
                 rings: symbols[k].rings,
                 itemIdx: "leading"
@@ -193,6 +200,8 @@ function draw(cfg) {
                     dotsToDraw.push({
                         x: cx + r * Math.cos(angle),
                         y: cy + r * Math.sin(angle),
+                        angle: angle,
+                        shape: symbols[k].shape,
                         filled: symbols[k].filled,
                         rings: symbols[k].rings,
                         itemIdx: i
@@ -238,6 +247,8 @@ function draw(cfg) {
         path.setAttribute("fill", "none");
         path.setAttribute("stroke", STROKE_COLOR);
         path.setAttribute("stroke-width", STROKE_WIDTH_ARC);
+        path.setAttribute("stroke-linecap", "round");
+        path.setAttribute("stroke-linejoin", "round");
         if (ip.idx >= 0) path.setAttribute("data-idx", ip.idx);
         svg.appendChild(path);
     }
@@ -267,34 +278,52 @@ function draw(cfg) {
         }
     }
 
-    // dots
+    // dots and semicircles
     const dotRadius = sectionWidth / 4;
     for (const dot of dotsToDraw) {
-        const innerR = dot.rings > 0 ? dotRadius * 0.5 : dotRadius;
-        const circle = document.createElementNS(NS, "circle");
-        circle.setAttribute("cx", dot.x);
-        circle.setAttribute("cy", dot.y);
-        circle.setAttribute("r", innerR);
-        circle.setAttribute("data-idx", dot.itemIdx);
-        if (dot.filled) {
-            circle.setAttribute("fill", STROKE_COLOR);
+        if (dot.shape === "semicircle-out" || dot.shape === "semicircle-in") {
+            const θ = dot.angle;
+            const r = dotRadius;
+            const p1x = dot.x + r * Math.cos(θ + Math.PI / 2);
+            const p1y = dot.y + r * Math.sin(θ + Math.PI / 2);
+            const p2x = dot.x + r * Math.cos(θ - Math.PI / 2);
+            const p2y = dot.y + r * Math.sin(θ - Math.PI / 2);
+            // outward: arc bulges away from center (sweep=1); inward: toward center (sweep=0)
+            const sweep = dot.shape === "semicircle-out" ? 1 : 0;
+            const path = document.createElementNS(NS, "path");
+            path.setAttribute("d", `M ${p1x} ${p1y} A ${r} ${r} 0 0 ${sweep} ${p2x} ${p2y}`);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", STROKE_COLOR);
+            path.setAttribute("stroke-width", STROKE_WIDTH_DOT);
+            path.setAttribute("data-idx", dot.itemIdx);
+            svg.appendChild(path);
         } else {
-            circle.setAttribute("fill", "none");
-            circle.setAttribute("stroke", STROKE_COLOR);
-            circle.setAttribute("stroke-width", STROKE_WIDTH_DOT);
-        }
-        svg.appendChild(circle);
+            const innerR = dot.rings > 0 ? dotRadius * 0.5 : dotRadius;
+            const circle = document.createElementNS(NS, "circle");
+            circle.setAttribute("cx", dot.x);
+            circle.setAttribute("cy", dot.y);
+            circle.setAttribute("r", innerR);
+            circle.setAttribute("data-idx", dot.itemIdx);
+            if (dot.filled) {
+                circle.setAttribute("fill", STROKE_COLOR);
+            } else {
+                circle.setAttribute("fill", "none");
+                circle.setAttribute("stroke", STROKE_COLOR);
+                circle.setAttribute("stroke-width", STROKE_WIDTH_DOT);
+            }
+            svg.appendChild(circle);
 
-        for (let ri = 0; ri < dot.rings; ri++) {
-            const ring = document.createElementNS(NS, "circle");
-            ring.setAttribute("cx", dot.x);
-            ring.setAttribute("cy", dot.y);
-            ring.setAttribute("r", dotRadius * (0.75 + ri * 0.25));
-            ring.setAttribute("fill", "none");
-            ring.setAttribute("stroke", STROKE_COLOR);
-            ring.setAttribute("stroke-width", STROKE_WIDTH_DOT);
-            ring.setAttribute("data-idx", dot.itemIdx);
-            svg.appendChild(ring);
+            for (let ri = 0; ri < dot.rings; ri++) {
+                const ring = document.createElementNS(NS, "circle");
+                ring.setAttribute("cx", dot.x);
+                ring.setAttribute("cy", dot.y);
+                ring.setAttribute("r", dotRadius * (0.75 + ri * 0.25));
+                ring.setAttribute("fill", "none");
+                ring.setAttribute("stroke", STROKE_COLOR);
+                ring.setAttribute("stroke-width", STROKE_WIDTH_DOT);
+                ring.setAttribute("data-idx", dot.itemIdx);
+                svg.appendChild(ring);
+            }
         }
     }
 

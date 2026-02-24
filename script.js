@@ -550,12 +550,7 @@ document.getElementById("zoom-out").addEventListener("click", () => {
     applyTransform();
 });
 
-window.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    zoom *= factor;
-    applyTransform();
-}, { passive: false });
+
 
 let dragging = false, dragStartX, dragStartY, startPanX, startPanY;
 container.addEventListener("mousedown", (e) => {

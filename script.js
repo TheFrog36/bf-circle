@@ -33,12 +33,12 @@ function parse(testString) {
             items.push({ type: "dir", dir: ch, mods: pendingMods, pos: i });
             pendingMods = [];
         } else if (ch === "[" || ch === "]") {
-            items.push({ type: ch, pos: i });
+            items.push({ type: ch, pos: i, mods: [] });
             pendingMods = [];
         } else if (ch === "+" || ch === "-" || ch === "." || ch === ",") {
             if (items.length > 0) {
                 const last = items[items.length - 1];
-                if (last.type === "dir") {
+                if (last.mods) {
                     last.mods.push({ ch, pos: i });
                 } else {
                     pendingMods.push({ ch, pos: i });
@@ -241,6 +241,7 @@ function draw(cfg) {
             const sinA = Math.sin(currentAngle);
             const centerR = outerRadius - rOffset;
 
+            let bracketR;
             if (isOpen) {
                 const outerR = centerR + BRACKET_GAP / 2;
                 const innerR = centerR - BRACKET_GAP / 2;
@@ -249,6 +250,7 @@ function draw(cfg) {
                 penX = cx + innerR * cosA;
                 penY = cy + innerR * sinA;
                 bracketCircles.push({ outerR, innerR, double: true, idx: i });
+                bracketR = outerR;
             } else {
                 const r = centerR;
                 const d = `M ${penX} ${penY} L ${cx + r * cosA} ${cy + r * sinA}`;
@@ -256,6 +258,24 @@ function draw(cfg) {
                 penX = cx + r * cosA;
                 penY = cy + r * sinA;
                 bracketCircles.push({ outerR: r, double: false, idx: i });
+                bracketR = r;
+            }
+
+            if (item.mods && item.mods.length > 0) {
+                const symbols = compressMods(item.mods);
+                const n = symbols.length;
+                for (let k = 0; k < n; k++) {
+                    const angle = (2 * Math.PI * (k + 1)) / (n + 1);
+                    dotsToDraw.push({
+                        x: cx + bracketR * Math.cos(angle),
+                        y: cy + bracketR * Math.sin(angle),
+                        angle: angle,
+                        shape: symbols[k].shape,
+                        filled: symbols[k].filled,
+                        rings: symbols[k].rings,
+                        itemIdx: i
+                    });
+                }
             }
         }
     }
@@ -407,7 +427,7 @@ function buildPosMap(parsed) {
     for (let i = 0; i < parsed.items.length; i++) {
         const item = parsed.items[i];
         posMap.set(item.pos, i);
-        if (item.type === "dir") {
+        if (item.mods) {
             for (const m of item.mods) posMap.set(m.pos, i);
         }
     }

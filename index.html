@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body style="background-color: #333;">
+    <div id="container"></div>
+    <div id="controls">
+        <label>Size <input type="number" step="100" id="canvas-size"></label>
+        <label>Boundary <input type="number" step="0.5" id="sw-boundary"></label>
+        <label>Arcs <input type="number" step="0.5" id="sw-arc"></label>
+        <label>Brackets <input type="number" step="0.5" id="sw-bracket"></label>
+        <label>Dots <input type="number" step="0.5" id="sw-dot"></label>
+        <label>Inner ○ <input type="number" step="1" id="dum-radius"></label>
+        <label>Bracket gap <input type="number" step="0.5" id="bracket-gap"></label>
+        <label>Highlight <input type="color" id="highlight-color" value="#ffdc32"></label>
+        <div class="btn-row" id="program-btns"></div>
+        <div class="btn-row">
+            <button id="zoom-in">+</button>
+            <button id="zoom-out">-</button>
+            <button id="download">SVG</button>
+        </div>
+    </div>
+    <div id="code-panel"></div>
+</body>
+<script src="script.js"></script>
+</html>

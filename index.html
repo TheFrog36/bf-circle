@@ -3,21 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Bfk</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body style="background-color: #333;">
     <div id="container"></div>
     <div id="controls">
-        <label>Size <input type="number" step="100" id="canvas-size"></label>
-        <label>Boundary <input type="number" step="0.5" id="sw-boundary"></label>
-        <label>Arcs <input type="number" step="0.5" id="sw-arc"></label>
-        <label>Brackets <input type="number" step="0.5" id="sw-bracket"></label>
-        <label>Dots <input type="number" step="0.5" id="sw-dot"></label>
-        <label>Inner ○ <input type="number" step="1" id="dum-radius"></label>
-        <label>Bracket gap <input type="number" step="0.5" id="bracket-gap"></label>
-        <label>Arc ∠ <input type="number" step="5" min="10" max="360" id="arc-angle"></label>
-        <label>Highlight <input type="color" id="highlight-color" value="#ffdc32"></label>
+        <div class="btn-row" id="render-mode-btns"></div>
+        <label title="Canvas size in pixels (blank = auto)">Size <input type="number" step="100" id="canvas-size"></label>
+        <label class="render1-only" title="Stroke width of outer and inner boundary circles">Boundary <input type="number" step="0.5" id="sw-boundary"></label>
+        <label class="render1-only" title="Stroke width of arc paths between circles">Arcs <input type="number" step="0.5" id="sw-arc"></label>
+        <label class="render1-only" title="Stroke width of bracket circles">Brackets <input type="number" step="0.5" id="sw-bracket"></label>
+        <label class="render1-only" title="Stroke width of dots and semicircles">Dots <input type="number" step="0.5" id="sw-dot"></label>
+        <label title="Radius of the inner circle">Inner ○ <input type="number" step="1" id="dum-radius"></label>
+        <label class="render1-only" title="Gap between open-bracket double circles">Bracket gap <input type="number" step="0.5" id="bracket-gap"></label>
+        <label class="render1-only" title="Arc sweep angle in degrees for each direction command">Arc <input type="number" step="5" min="10" max="360" id="arc-angle"></label>
+        <div class="render2-only" id="dent-angle-controls"></div>
+        <label class="render2-only" title="Angular padding between dents in degrees">Dent gap <input type="number" step="1" min="0" max="180" id="dent-padding"></label>
+        <label class="render2-only" title="Max dent arc length in pixels (caps dent size on large rings)">Dent px <input type="number" step="50" min="0" id="dent-max-size"></label>
+        <label class="render2-only" title="Max gap arc length in pixels (caps gap size on large rings)">Gap px <input type="number" step="50" min="0" id="gap-max-size"></label>
+        <label title="Highlight color for hover">Highlight <input type="color" id="highlight-color" value="#ffdc32"></label>
         <div class="btn-row" id="program-btns"></div>
         <div class="btn-row">
             <button id="zoom-in">+</button>

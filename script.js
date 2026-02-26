@@ -5,18 +5,41 @@ Promise.all([
 
 const NS = "http://www.w3.org/2000/svg";
 const programKeys = Object.keys(program);
-let currentCode = programKeys[0];
+
+// --- URL parameter utilities ---
+function getUrlParam(key, fallback) {
+    return new URLSearchParams(window.location.search).get(key) || fallback;
+}
+function setUrlParam(key, value) {
+    const params = new URLSearchParams(window.location.search);
+    params.set(key, value);
+    history.replaceState(null, "", "?" + params.toString());
+}
+
+let renderMode = getUrlParam("render", "render1");
+let currentCode = getUrlParam("program", programKeys[0]);
+if (!programKeys.includes(currentCode)) currentCode = programKeys[0];
 
 // Default config values for any program missing from config.json
 const DEFAULT_CONFIG = {
     FIXED_SIZE: 600, PADDING: 40, BG_COLOR: "#000", STROKE_COLOR: "#fff",
     STROKE_WIDTH_BOUNDARY: 40, STROKE_WIDTH_ARC: 20, STROKE_WIDTH_BRACKET: 20,
-    STROKE_WIDTH_DOT: 10, BRACKET_GAP: 40, DUM_RADIUS: 50, ARC_ANGLE: 180
+    STROKE_WIDTH_DOT: 10, BRACKET_GAP: 40, DUM_RADIUS: 50, ARC_ANGLE: 180,
+    DENT_ANGLE_GT: 30, DENT_ANGLE_LT: 30, DENT_ANGLE_PLUS: 30,
+    DENT_ANGLE_MINUS: 30, DENT_ANGLE_DOT: 30, DENT_ANGLE_COMMA: 30,
+    DENT_ANGLE_OPEN: 30, DENT_ANGLE_CLOSE: 30,
+    DENT_PADDING: 10, DENT_MAX_SIZE: 1000, GAP_MAX_SIZE: 1000
 };
 
-// Ensure every program has a config entry
+const DENT_SYMBOL_KEYS = {
+    ">": "DENT_ANGLE_GT", "<": "DENT_ANGLE_LT", "+": "DENT_ANGLE_PLUS",
+    "-": "DENT_ANGLE_MINUS", ".": "DENT_ANGLE_DOT", ",": "DENT_ANGLE_COMMA",
+    "[": "DENT_ANGLE_OPEN", "]": "DENT_ANGLE_CLOSE"
+};
+
+// Ensure every program has a config entry (merge defaults for missing keys)
 for (const key of programKeys) {
-    if (!configs[key]) configs[key] = { ...DEFAULT_CONFIG };
+    configs[key] = { ...DEFAULT_CONFIG, ...(configs[key] || {}) };
 }
 
 let config = configs[currentCode];
@@ -81,41 +104,36 @@ function compressMods(mods) {
     return symbols;
 }
 
-// --- Draw function ---
-function draw(cfg) {
-    const { BG_COLOR, STROKE_COLOR } = cfg;
+function createCircle(svg, cx, cy, r, stroke, strokeWidth) {
+    const c = document.createElementNS(NS, "circle");
+    c.setAttribute("cx", cx);
+    c.setAttribute("cy", cy);
+    c.setAttribute("r", r);
+    c.setAttribute("fill", "none");
+    c.setAttribute("stroke", stroke);
+    c.setAttribute("stroke-width", strokeWidth);
+    svg.appendChild(c);
+    return c;
+}
 
+function initCanvas(cfg) {
     const code = program[currentCode];
-    const { leadingMods, items } = parse(code);
+    const parsed = parse(code);
+    const items = parsed.items;
 
-    // Auto-compute canvas size based on program complexity
     const numDirItems = items.filter(i => i.type === "dir").length;
     const numOpen = items.filter(i => i.type === "[").length;
     const numClose = items.filter(i => i.type === "]").length;
 
-    const MIN_SECTION_WIDTH = 20;
-    const BASE_PADDING = 10;
-    const BASE_DUM_RADIUS = cfg.DUM_RADIUS;
     const baseBracketSpace = numOpen * 6 + numClose * 2;
-    const autoSize = Math.round(2 * (BASE_PADDING + BASE_DUM_RADIUS + (numDirItems + 1) * MIN_SECTION_WIDTH + baseBracketSpace));
+    const autoSize = Math.round(2 * (10 + cfg.DUM_RADIUS + (numDirItems + 1) * 20 + baseBracketSpace));
     const size = sizeOverride != null ? sizeOverride : Math.max(500, Math.min(15000, autoSize));
-
-    // Scale all settings proportionally to canvas size
     const scale = size / 10000;
-    const PADDING = BASE_PADDING * scale;
-    const STROKE_WIDTH_BOUNDARY = cfg.STROKE_WIDTH_BOUNDARY * scale;
-    const STROKE_WIDTH_ARC = cfg.STROKE_WIDTH_ARC * scale;
-    const STROKE_WIDTH_BRACKET = cfg.STROKE_WIDTH_BRACKET * scale;
-    const STROKE_WIDTH_DOT = cfg.STROKE_WIDTH_DOT * scale;
-    const BRACKET_GAP = cfg.BRACKET_GAP * scale;
-    const dumRadius = BASE_DUM_RADIUS * scale;
 
-    // Update size display (only when auto-computed)
     if (sizeOverride == null) document.getElementById("canvas-size").value = size;
 
     const svgContainer = document.getElementById("container");
     svgContainer.innerHTML = "";
-
     const svg = document.createElementNS(NS, "svg");
     svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
     svg.setAttribute("xmlns", NS);
@@ -124,35 +142,34 @@ function draw(cfg) {
     const bg = document.createElementNS(NS, "rect");
     bg.setAttribute("width", size);
     bg.setAttribute("height", size);
-    bg.setAttribute("fill", BG_COLOR);
+    bg.setAttribute("fill", cfg.BG_COLOR);
     svg.appendChild(bg);
 
-    const cx = size / 2;
-    const cy = size / 2;
-    const outerRadius = size / 2 - PADDING;
-    const leftoverSpace = outerRadius - dumRadius;
+    const cx = size / 2, cy = size / 2;
+    const PADDING = 10 * scale;
+    const outerRadius = cx - PADDING;
+    const dumRadius = cfg.DUM_RADIUS * scale;
 
+    return { code, parsed, items, size, scale, svg, cx, cy, outerRadius, dumRadius };
+}
+
+// --- Draw function ---
+function draw(cfg) {
+    const { STROKE_COLOR } = cfg;
+    const { code, parsed, items, size, scale, svg, cx, cy, outerRadius, dumRadius } = initCanvas(cfg);
+    const { leadingMods } = parsed;
+
+    const STROKE_WIDTH_BOUNDARY = cfg.STROKE_WIDTH_BOUNDARY * scale;
+    const STROKE_WIDTH_ARC = cfg.STROKE_WIDTH_ARC * scale;
+    const STROKE_WIDTH_BRACKET = cfg.STROKE_WIDTH_BRACKET * scale;
+    const STROKE_WIDTH_DOT = cfg.STROKE_WIDTH_DOT * scale;
+    const BRACKET_GAP = cfg.BRACKET_GAP * scale;
+
+    const leftoverSpace = outerRadius - dumRadius;
     const sectionWidth = leftoverSpace / (items.length + 1);
 
-    // outer circle
-    const outerCircle = document.createElementNS(NS, "circle");
-    outerCircle.setAttribute("cx", cx);
-    outerCircle.setAttribute("cy", cy);
-    outerCircle.setAttribute("r", outerRadius);
-    outerCircle.setAttribute("fill", "none");
-    outerCircle.setAttribute("stroke", STROKE_COLOR);
-    outerCircle.setAttribute("stroke-width", STROKE_WIDTH_BOUNDARY);
-    svg.appendChild(outerCircle);
-
-    // inner circle
-    const innerCircle = document.createElementNS(NS, "circle");
-    innerCircle.setAttribute("cx", cx);
-    innerCircle.setAttribute("cy", cy);
-    innerCircle.setAttribute("r", dumRadius);
-    innerCircle.setAttribute("fill", "none");
-    innerCircle.setAttribute("stroke", STROKE_COLOR);
-    innerCircle.setAttribute("stroke-width", STROKE_WIDTH_BOUNDARY);
-    svg.appendChild(innerCircle);
+    const outerCircle = createCircle(svg, cx, cy, outerRadius, STROKE_COLOR, STROKE_WIDTH_BOUNDARY);
+    createCircle(svg, cx, cy, dumRadius, STROKE_COLOR, STROKE_WIDTH_BOUNDARY);
 
     // dots on outer circle for leading +/-
     const dotsToDraw = [];
@@ -415,6 +432,315 @@ function draw(cfg) {
     buildCodePanel(code, { leadingMods, items });
 }
 
+// --- draw2: render with dents and brackets ---
+function drawDentRing(svg, cx, cy, R, dents, getAngleDeg, dentPaddingDeg, depth, strokeColor, strokeWidth, bgColor, maxArc, maxGapArc) {
+    // dents: array of { dir: ">"|"<"|"+"|"-"|"."|","|"["|"]", idx: number }
+    if (!dents || dents.length === 0) {
+        const c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", cx);
+        c.setAttribute("cy", cy);
+        c.setAttribute("r", R);
+        c.setAttribute("fill", "none");
+        c.setAttribute("stroke", strokeColor);
+        c.setAttribute("stroke-width", strokeWidth);
+        svg.appendChild(c);
+        return;
+    }
+
+    const n = dents.length;
+    // Cap each dent angle: min(configured angle, maxArc / R)
+    const maxAngleRad = (maxArc && R > 0) ? maxArc / R : Infinity;
+    const cappedRad = d => Math.min(getAngleDeg(d.dir) * Math.PI / 180, maxAngleRad);
+
+    // Fixed-size gaps with pixel cap (same approach as dent capping)
+    const gapConfigRad = dentPaddingDeg * Math.PI / 180;
+    const maxGapAngleRad = (maxGapArc && R > 0) ? maxGapArc / R : Infinity;
+    const gapRad = Math.min(gapConfigRad, maxGapAngleRad);
+
+    // Compute start angles, distributing any leftover space evenly into gaps
+    const startAngles = [];
+    const dentRads = dents.map(d => cappedRad(d));
+    const totalDent = dentRads.reduce((a, b) => a + b, 0);
+    const totalUsed = totalDent + n * gapRad;
+    const leftover = 2 * Math.PI - totalUsed;
+    const extraGap = leftover > 0 ? leftover / n : 0;
+    const effectiveGap = gapRad + extraGap;
+    let cursor = effectiveGap / 2;
+    for (let i = 0; i < n; i++) {
+        startAngles.push(cursor);
+        cursor += dentRads[i] + effectiveGap;
+    }
+
+    // Emit one <path> per dent (tooth/flat + trailing gap arc), tagged with data-idx
+    const bandDents = [];
+    const hitPaths = [];   // collect d-strings + idx for hit areas
+
+    for (let i = 0; i < n; i++) {
+        const dentStart = startAngles[i];
+        const myRad = dentRads[i];
+        const dentEnd = dentStart + myRad;
+        const dir = dents[i].dir;
+        const dentIdx = dents[i].idx;
+        const myLargeArc = myRad > Math.PI ? 1 : 0;
+
+        // Leading gap arc (from previous dent's end to this dent's start)
+        const prevEnd = i === 0
+            ? 0  // start of circle
+            : startAngles[i - 1] + dentRads[i - 1];
+        const leadGapRad = dentStart - prevEnd;
+
+        const bx0 = cx + R * Math.cos(dentStart);
+        const by0 = cy + R * Math.sin(dentStart);
+
+        // Build per-dent path: leading gap arc, dent shape, trailing gap arc
+        let d = "";
+
+        // Start point: at the end of the previous dent (or angle 0)
+        const gapStartAngle = prevEnd;
+        const gsx = cx + R * Math.cos(gapStartAngle);
+        const gsy = cy + R * Math.sin(gapStartAngle);
+        d += `M ${gsx} ${gsy} `;
+
+        // Leading gap arc to dent start
+        if (leadGapRad > 0.001) {
+            const leadLargeArc = leadGapRad > Math.PI ? 1 : 0;
+            d += `A ${R} ${R} 0 ${leadLargeArc} 1 ${bx0} ${by0} `;
+        }
+
+        // Dent shape
+        if (dir === ">" || dir === "<") {
+            const deviation = dir === ">" ? -depth : depth;
+            const toothR = R + deviation;
+            const tx0 = cx + toothR * Math.cos(dentStart);
+            const ty0 = cy + toothR * Math.sin(dentStart);
+            const tx1 = cx + toothR * Math.cos(dentEnd);
+            const ty1 = cy + toothR * Math.sin(dentEnd);
+            const bx1 = cx + R * Math.cos(dentEnd);
+            const by1 = cy + R * Math.sin(dentEnd);
+
+            d += `L ${tx0} ${ty0} `;
+            d += `A ${toothR} ${toothR} 0 ${myLargeArc} 1 ${tx1} ${ty1} `;
+            d += `L ${bx1} ${by1} `;
+        } else {
+            const bx1 = cx + R * Math.cos(dentEnd);
+            const by1 = cy + R * Math.sin(dentEnd);
+            d += `A ${R} ${R} 0 ${myLargeArc} 1 ${bx1} ${by1} `;
+            bandDents.push(i);
+        }
+
+        const path = document.createElementNS(NS, "path");
+        path.setAttribute("d", d);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", strokeColor);
+        path.setAttribute("stroke-width", strokeWidth);
+        if (dentIdx != null) path.setAttribute("data-idx", dentIdx);
+        svg.appendChild(path);
+
+        hitPaths.push({ d, idx: dentIdx });
+    }
+
+    // Closing gap: from last dent's end back to first dent's leading gap start (angle 0)
+    const lastEnd = startAngles[n - 1] + dentRads[n - 1];
+    const closeRad = 2 * Math.PI - lastEnd;
+    if (closeRad > 0.001) {
+        const lx = cx + R * Math.cos(lastEnd);
+        const ly = cy + R * Math.sin(lastEnd);
+        const fx = cx + R * Math.cos(0);
+        const fy = cy + R * Math.sin(0);
+        const closeLargeArc = closeRad > Math.PI ? 1 : 0;
+        const closeD = `M ${lx} ${ly} A ${R} ${R} 0 ${closeLargeArc} 1 ${fx} ${fy}`;
+        const closePath = document.createElementNS(NS, "path");
+        closePath.setAttribute("d", closeD);
+        closePath.setAttribute("fill", "none");
+        closePath.setAttribute("stroke", strokeColor);
+        closePath.setAttribute("stroke-width", strokeWidth);
+        svg.appendChild(closePath);
+    }
+
+    // Band segments
+    const outerR = R + depth;
+    const innerR = R - depth;
+
+    function drawBand(r0, r1, aStart, aEnd, fill, idx) {
+        const la = (aEnd - aStart) > Math.PI ? 1 : 0;
+        const a0x = cx + r0 * Math.cos(aStart), a0y = cy + r0 * Math.sin(aStart);
+        const a1x = cx + r0 * Math.cos(aEnd),   a1y = cy + r0 * Math.sin(aEnd);
+        const b0x = cx + r1 * Math.cos(aStart), b0y = cy + r1 * Math.sin(aStart);
+        const b1x = cx + r1 * Math.cos(aEnd),   b1y = cy + r1 * Math.sin(aEnd);
+        const bd = `M ${a0x} ${a0y} A ${r0} ${r0} 0 ${la} 1 ${a1x} ${a1y} L ${b1x} ${b1y} A ${r1} ${r1} 0 ${la} 0 ${b0x} ${b0y} Z`;
+        const bp = document.createElementNS(NS, "path");
+        bp.setAttribute("d", bd);
+        bp.setAttribute("stroke", strokeColor);
+        bp.setAttribute("stroke-width", strokeWidth);
+        bp.setAttribute("fill", fill);
+        if (idx != null) bp.setAttribute("data-idx", idx);
+        svg.appendChild(bp);
+    }
+
+    for (const i of bandDents) {
+        const dir = dents[i].dir;
+        const dentIdx = dents[i].idx;
+        const dentStart = startAngles[i];
+        const dentEnd = dentStart + dentRads[i];
+
+        if (dir === "[") {
+            drawBand(outerR, R, dentStart, dentEnd, strokeColor, dentIdx);
+            drawBand(R, innerR, dentStart, dentEnd, bgColor, dentIdx);
+        } else if (dir === "]") {
+            drawBand(outerR, R, dentStart, dentEnd, bgColor, dentIdx);
+            drawBand(R, innerR, dentStart, dentEnd, strokeColor, dentIdx);
+        } else if (dir === ".") {
+            drawBand(R, innerR, dentStart, dentEnd, strokeColor, dentIdx);
+        } else if (dir === ",") {
+            drawBand(outerR, R, dentStart, dentEnd, strokeColor, dentIdx);
+        } else if (dir === "+") {
+            drawBand(outerR, innerR, dentStart, dentEnd, strokeColor, dentIdx);
+        } else {
+            drawBand(outerR, innerR, dentStart, dentEnd, bgColor, dentIdx);
+        }
+    }
+
+    // Hit-area overlays for render2 highlighting
+    for (const hp of hitPaths) {
+        if (hp.idx == null) continue;
+        const hit = document.createElementNS(NS, "path");
+        hit.setAttribute("d", hp.d);
+        hit.setAttribute("fill", "none");
+        hit.setAttribute("stroke", "transparent");
+        hit.setAttribute("stroke-width", strokeWidth * 8);
+        hit.setAttribute("data-idx", hp.idx);
+        hit.classList.add("hit-area");
+        svg.appendChild(hit);
+    }
+}
+
+function draw2(cfg) {
+    const { BG_COLOR, STROKE_COLOR } = cfg;
+    const { code, parsed, items, size, scale, svg, cx, cy, outerRadius, dumRadius } = initCanvas(cfg);
+
+    const STROKE_WIDTH_BOUNDARY = cfg.STROKE_WIDTH_BOUNDARY * scale;
+    const STROKE_WIDTH_BRACKET = cfg.STROKE_WIDTH_BRACKET * scale;
+
+    const outerCircle = createCircle(svg, cx, cy, outerRadius, STROKE_COLOR, STROKE_WIDTH_BOUNDARY);
+    createCircle(svg, cx, cy, dumRadius, STROKE_COLOR, STROKE_WIDTH_BOUNDARY);
+
+    // --- Group all parsed items into one dent list ---
+    const allDents = [];
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type === "dir") {
+            allDents.push({ dir: item.dir, idx: i });
+            if (item.mods) {
+                for (const m of item.mods) {
+                    allDents.push({ dir: m.ch, idx: i });
+                }
+            }
+        } else {
+            // [ or ]
+            allDents.push({ dir: item.type, idx: i });
+        }
+    }
+
+    // --- Split into rings with actual arc-length capacity ---
+    const dentPaddingDeg = cfg.DENT_PADDING || 0;
+    const getAngleDeg = dir => cfg[DENT_SYMBOL_KEYS[dir]] || 30;
+    const maxArc = cfg.DENT_MAX_SIZE * scale;
+    const maxGapArc = cfg.GAP_MAX_SIZE * scale;
+
+    // Limit outer radius to where dents are still meaningfully visible.
+    // At maxUsefulR, the smallest configured dent angle is reduced to 50% of configured.
+    const minDentAngleRad = Math.min(...allDents.map(d => getAngleDeg(d.dir))) * Math.PI / 180;
+    const maxUsefulR = (maxArc > 0 && minDentAngleRad > 0)
+        ? 2 * maxArc / minDentAngleRad
+        : outerRadius;
+    const usableOuter = Math.min(outerRadius, maxUsefulR);
+
+    // Iteratively assign dents to rings, recomputing radii until stable
+    let levels = [];
+    let prevLevelCount = -1;
+
+    // Initial guess: use uncapped angles
+    {
+        let ringDents = [];
+        let usedAngle = 0;
+        for (const dent of allDents) {
+            const needed = getAngleDeg(dent.dir) + dentPaddingDeg;
+            if (usedAngle + needed > 360 && ringDents.length > 0) {
+                levels.push(ringDents);
+                ringDents = [];
+                usedAngle = 0;
+            }
+            ringDents.push(dent);
+            usedAngle += needed;
+        }
+        if (ringDents.length > 0) levels.push(ringDents);
+    }
+
+    // Repack loop: recompute using actual capped angles at each radius
+    for (let iter = 0; iter < 10 && levels.length !== prevLevelCount; iter++) {
+        prevLevelCount = levels.length;
+        const totalLevels = levels.length;
+        const rawRS = (usableOuter - dumRadius) / (totalLevels + 1);
+        const ringSpacing = Math.min(rawRS, maxArc * 3 / 0.33);
+        const effOuter = Math.min(usableOuter, dumRadius + ringSpacing * (totalLevels + 1));
+
+        // Flatten all dents back and re-distribute using capped angles at actual radii
+        const flat = levels.flat();
+        levels = [];
+        let ringDents = [];
+        let usedAngle = 0;
+        let ringIdx = 0;
+
+        for (const dent of flat) {
+            const R = effOuter - ringSpacing * (ringIdx + 1);
+            const cappedDentDeg = (maxArc && R > 0)
+                ? Math.min(getAngleDeg(dent.dir), (maxArc / R) * 180 / Math.PI)
+                : getAngleDeg(dent.dir);
+            const cappedGapDeg = (maxGapArc && R > 0)
+                ? Math.min(dentPaddingDeg, (maxGapArc / R) * 180 / Math.PI)
+                : dentPaddingDeg;
+            const needed = cappedDentDeg + cappedGapDeg;
+
+            if (usedAngle + needed > 360 && ringDents.length > 0) {
+                levels.push(ringDents);
+                ringDents = [];
+                usedAngle = 0;
+                ringIdx++;
+            }
+            ringDents.push(dent);
+            usedAngle += needed;
+        }
+        if (ringDents.length > 0) levels.push(ringDents);
+    }
+
+    // --- Assign radii and draw ---
+    const totalLevels = levels.length;
+    if (totalLevels > 0) {
+        const maxDepth = maxArc * 3;
+        const rawSpacing = (usableOuter - dumRadius) / (totalLevels + 1);
+        const ringSpacing = Math.min(rawSpacing, maxDepth / 0.33);
+        const depth = Math.min(ringSpacing * 0.33, maxDepth);
+        const effectiveOuter = Math.min(usableOuter, dumRadius + ringSpacing * (totalLevels + 1));
+        outerCircle.setAttribute("r", effectiveOuter);
+
+        for (let i = 0; i < totalLevels; i++) {
+            const R = effectiveOuter - ringSpacing * (i + 1);
+            drawDentRing(svg, cx, cy, R, levels[i], getAngleDeg, dentPaddingDeg, depth, STROKE_COLOR, STROKE_WIDTH_BRACKET, BG_COLOR, maxArc, maxGapArc);
+        }
+    }
+
+    buildCodePanel(code, parsed);
+}
+
+// --- Render dispatcher ---
+function redraw() {
+    if (renderMode === "render2") {
+        draw2(config);
+    } else {
+        draw(config);
+    }
+}
+
 // --- Code panel ---
 const codePanelEl = document.getElementById("code-panel");
 codePanelEl.setAttribute("contenteditable", "true");
@@ -493,7 +819,7 @@ const sizeInput = document.getElementById("canvas-size");
 sizeInput.addEventListener("input", () => {
     const v = parseInt(sizeInput.value, 10);
     sizeOverride = (v >= 100) ? v : null;
-    draw(config);
+    redraw();
 });
 
 // --- Code editor ---
@@ -501,7 +827,7 @@ codePanelEl.addEventListener("input", () => {
     if (suppressCodeInput) return;
     program[currentCode] = getCodePanelText();
     sizeOverride = null;
-    draw(config);
+    redraw();
 });
 
 // Force plain text on paste
@@ -524,8 +850,28 @@ function applyHighlightColor(hex) {
 applyHighlightColor(hlPicker.value);
 hlPicker.addEventListener("input", () => applyHighlightColor(hlPicker.value));
 
+// --- Render mode buttons ---
+const renderBtnRow = document.getElementById("render-mode-btns");
+const controlsEl = document.getElementById("controls");
+["render1", "render2"].forEach(mode => {
+    const btn = document.createElement("button");
+    btn.textContent = mode;
+    if (mode === renderMode) btn.classList.add("active");
+    btn.addEventListener("click", () => {
+        renderMode = mode;
+        setUrlParam("render", mode);
+        renderBtnRow.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        controlsEl.classList.toggle("mode-render2", mode === "render2");
+        redraw();
+    });
+    renderBtnRow.appendChild(btn);
+});
+// Apply initial mode class
+if (renderMode === "render2") controlsEl.classList.add("mode-render2");
+
 // --- Initial draw ---
-draw(config);
+redraw();
 
 // --- Program switcher ---
 const btnRow = document.getElementById("program-btns");
@@ -539,58 +885,124 @@ programKeys.forEach(key => {
         sizeOverride = null;
         btnRow.querySelectorAll("button").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
+        setUrlParam("program", key);
         syncSlidersFromConfig();
-        draw(config);
+        redraw();
     });
     btnRow.appendChild(btn);
 });
+
+// --- Wrap number inputs with custom arrows ---
+function wrapNumInput(input) {
+    const wrap = document.createElement("span");
+    wrap.className = "num-wrap";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const arrows = document.createElement("span");
+    arrows.className = "num-arrows";
+
+    const up = document.createElement("span");
+    up.className = "num-arr";
+    up.innerHTML = '<svg viewBox="0 0 8 5"><path d="M1 4L4 1L7 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    up.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.stepUp();
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const down = document.createElement("span");
+    down.className = "num-arr";
+    down.innerHTML = '<svg viewBox="0 0 8 5"><path d="M1 1L4 4L7 1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    down.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        input.stepDown();
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    arrows.appendChild(up);
+    arrows.appendChild(down);
+    wrap.appendChild(arrows);
+    return wrap;
+}
+
+// Wrap all static number inputs in #controls
+document.querySelectorAll("#controls input[type='number']").forEach(wrapNumInput);
 
 // --- Slider controls ---
 const sliders = {
     "sw-boundary": "STROKE_WIDTH_BOUNDARY",
     "sw-arc": "STROKE_WIDTH_ARC",
     "sw-bracket": "STROKE_WIDTH_BRACKET",
-    "sw-dot": "STROKE_WIDTH_DOT"
+    "sw-dot": "STROKE_WIDTH_DOT",
+    "dum-radius": "DUM_RADIUS",
+    "bracket-gap": "BRACKET_GAP",
+    "arc-angle": "ARC_ANGLE",
+    "dent-padding": "DENT_PADDING",
+    "dent-max-size": "DENT_MAX_SIZE",
+    "gap-max-size": "GAP_MAX_SIZE",
 };
-
+const sliderEls = {};
 for (const [id, key] of Object.entries(sliders)) {
     const el = document.getElementById(id);
     el.value = config[key];
     el.addEventListener("input", () => {
         config[key] = parseFloat(el.value);
-        draw(config);
+        redraw();
     });
+    sliderEls[id] = el;
 }
 
-const dumRadiusInput = document.getElementById("dum-radius");
-dumRadiusInput.value = config.DUM_RADIUS;
-dumRadiusInput.addEventListener("input", () => {
-    config.DUM_RADIUS = parseFloat(dumRadiusInput.value);
-    draw(config);
-});
-
-const bracketGapInput = document.getElementById("bracket-gap");
-bracketGapInput.value = config.BRACKET_GAP;
-bracketGapInput.addEventListener("input", () => {
-    config.BRACKET_GAP = parseFloat(bracketGapInput.value);
-    draw(config);
-});
-
-const arcAngleInput = document.getElementById("arc-angle");
-arcAngleInput.value = config.ARC_ANGLE;
-arcAngleInput.addEventListener("input", () => {
-    config.ARC_ANGLE = parseFloat(arcAngleInput.value);
-    draw(config);
+// --- Per-symbol dent angle controls ---
+const dentAngleContainer = document.getElementById("dent-angle-controls");
+const dentAngleInputs = {};
+const DENT_SYMBOLS = [
+    { ch: ">", key: "DENT_ANGLE_GT", label: ">" },
+    { ch: "<", key: "DENT_ANGLE_LT", label: "<" },
+    { ch: "+", key: "DENT_ANGLE_PLUS", label: "+" },
+    { ch: "-", key: "DENT_ANGLE_MINUS", label: "\u2212" },
+    { ch: ".", key: "DENT_ANGLE_DOT", label: "." },
+    { ch: ",", key: "DENT_ANGLE_COMMA", label: "," },
+    { ch: "[", key: "DENT_ANGLE_OPEN", label: "[" },
+    { ch: "]", key: "DENT_ANGLE_CLOSE", label: "]" },
+];
+DENT_SYMBOLS.forEach(sym => {
+    const lbl = document.createElement("label");
+    lbl.textContent = sym.label + " \u2220 ";
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.step = "5"; inp.min = "5"; inp.max = "180";
+    inp.value = config[sym.key];
+    inp.addEventListener("input", () => {
+        config[sym.key] = parseFloat(inp.value);
+        redraw();
+    });
+    const btn = document.createElement("button");
+    btn.className = "apply-all-btn";
+    btn.title = "Apply this angle to all symbols";
+    btn.innerHTML = '<svg viewBox="0 0 12 10" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5H8M6 2.5L8.5 5L6 7.5"/><path d="M10 1.5V8.5" stroke-dasharray="1.5 1.5"/></svg>';
+    btn.addEventListener("click", () => {
+        const val = parseFloat(inp.value);
+        DENT_SYMBOLS.forEach(s => {
+            config[s.key] = val;
+            dentAngleInputs[s.ch].value = val;
+        });
+        redraw();
+    });
+    lbl.appendChild(inp);
+    wrapNumInput(inp);
+    lbl.appendChild(btn);
+    dentAngleContainer.appendChild(lbl);
+    dentAngleInputs[sym.ch] = inp;
 });
 
 // --- Sync sliders to current config ---
 function syncSlidersFromConfig() {
     for (const [id, key] of Object.entries(sliders)) {
-        document.getElementById(id).value = config[key];
+        sliderEls[id].value = config[key];
     }
-    dumRadiusInput.value = config.DUM_RADIUS;
-    bracketGapInput.value = config.BRACKET_GAP;
-    arcAngleInput.value = config.ARC_ANGLE;
+    DENT_SYMBOLS.forEach(sym => {
+        dentAngleInputs[sym.ch].value = config[sym.key];
+    });
 }
 
 // --- Zoom & pan ---
@@ -699,23 +1111,23 @@ function clearHighlights() {
     document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
 }
 
-codePanelEl.addEventListener("mouseenter", (e) => {
+codePanelEl.addEventListener("mouseover", (e) => {
+    clearHighlights();
     const span = e.target.closest(".bf-char");
     if (span) highlightGroup(span.getAttribute("data-idx"));
-}, true);
-codePanelEl.addEventListener("mouseleave", (e) => {
-    const span = e.target.closest(".bf-char");
-    if (span) clearHighlights();
-}, true);
+});
+codePanelEl.addEventListener("mouseleave", () => {
+    clearHighlights();
+});
 
 const svgContainer2 = document.getElementById("container");
-svgContainer2.addEventListener("mouseenter", (e) => {
+svgContainer2.addEventListener("mouseover", (e) => {
+    clearHighlights();
     const el = e.target.closest("[data-idx]");
     if (el) highlightGroup(el.getAttribute("data-idx"));
-}, true);
-svgContainer2.addEventListener("mouseleave", (e) => {
-    const el = e.target.closest("[data-idx]");
-    if (el) clearHighlights();
-}, true);
+});
+svgContainer2.addEventListener("mouseleave", () => {
+    clearHighlights();
+});
 
 }); // end fetch

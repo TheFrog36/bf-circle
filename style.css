@@ -43,14 +43,59 @@ svg {
     white-space: nowrap;
 }
 
-#controls input[type="number"] {
+#controls .num-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+#controls .num-wrap input[type="number"] {
     width: 50px;
     background: #000;
     color: #fff;
     border: 1px solid #fff;
     font: 11px/1 monospace;
-    padding: 2px 4px;
+    padding: 2px 16px 2px 4px;
     outline: none;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+#controls .num-wrap input[type="number"]::-webkit-inner-spin-button,
+#controls .num-wrap input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#controls .num-wrap .num-arrows {
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    bottom: 1px;
+    display: flex;
+    flex-direction: column;
+    width: 12px;
+}
+
+#controls .num-wrap .num-arr {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    color: #666;
+}
+
+#controls .num-wrap .num-arr:hover {
+    color: #fff;
+}
+
+#controls .num-wrap .num-arr svg {
+    width: 8px;
+    height: 5px;
 }
 
 #controls input[type="color"] {
@@ -96,6 +141,55 @@ svg {
 #controls button.active {
     background: #fff;
     color: #000;
+}
+
+/* Render-mode-specific control visibility */
+#controls.mode-render2 .render1-only {
+    display: none;
+}
+#controls:not(.mode-render2) .render2-only {
+    display: none;
+}
+
+#dent-angle-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#dent-angle-controls label {
+    color: #fff;
+    font: 11px/1 monospace;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+#dent-angle-controls .apply-all-btn {
+    background: none;
+    border: 1px solid #fff;
+    padding: 2px;
+    cursor: pointer;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 14px;
+}
+
+#dent-angle-controls .apply-all-btn svg {
+    width: 12px;
+    height: 10px;
+}
+
+#dent-angle-controls .apply-all-btn:hover {
+    background: #fff;
+}
+
+#dent-angle-controls .apply-all-btn:hover svg {
+    stroke: #000;
 }
 
 /* Code panel */

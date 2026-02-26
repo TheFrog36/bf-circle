@@ -1,6 +1,6 @@
 {
   "code": {
-    "FIXED_SIZE": 2000,
+    "FIXED_SIZE": 15000,
     "PADDING": 40,
     "BG_COLOR": "#000",
     "STROKE_COLOR": "#fff",
@@ -10,7 +10,12 @@
     "STROKE_WIDTH_DOT": 10,
     "BRACKET_GAP": 2,
     "DUM_RADIUS": 50,
-    "ARC_ANGLE": 180
+    "ARC_ANGLE": 180,
+    "DENT_ANGLE_GT": 5, "DENT_ANGLE_LT": 5,
+    "DENT_ANGLE_PLUS": 5, "DENT_ANGLE_MINUS": 5,
+    "DENT_ANGLE_DOT": 5, "DENT_ANGLE_COMMA": 5,
+    "DENT_ANGLE_OPEN": 5, "DENT_ANGLE_CLOSE": 5,
+    "DENT_PADDING": 5, "DENT_MAX_SIZE": 100, "GAP_MAX_SIZE": 100
   },
   "code2": {
     "FIXED_SIZE": 600,
